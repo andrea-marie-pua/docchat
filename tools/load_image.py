@@ -9,9 +9,21 @@ from tools.path_utils import is_path_safe
 
 def load_image(chat, path):
     """Add a safe local PNG image to chat history as a Base64 data URL.
-
     Unsafe paths or unreadable images leave the conversation unchanged.
+
+    Examples:
+        >>> from types import SimpleNamespace
+        >>> bot = SimpleNamespace(messages=[])
+        >>> load_image(bot, "../butterfly.png")
+        'Error: Unsafe path'
+        >>> bot.messages
+        []
+        >>> load_image(bot, "butterfly.jpg")
+        'Error: Only PNG images are supported'
+        >>> bot.messages
+        []
     """
+
     path = str(path)
 
     if not is_path_safe(path):
