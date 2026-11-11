@@ -1,6 +1,5 @@
-
+"""Test DocChat's tool calls, conversation history, and extra-credit features."""
 from chat import Chat
-
 
 
 def test_butterfly_image_upload():
