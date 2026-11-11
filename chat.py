@@ -84,7 +84,22 @@ TOOLS = [
 
 
 def llm(messages, temperature=1):
-    """Send the conversation and available tools to Groq."""
+    """Send the conversation and available tools to Groq.
+
+    The API call is mocked so the example works without an API key.
+
+    >>> from unittest.mock import MagicMock, patch
+    >>> fake_message = MagicMock()
+    >>> fake_message.content = "Ahoy, matey!"
+    >>> fake_response = MagicMock()
+    >>> fake_response.choices[0].message = fake_message
+    >>> with patch("chat.Groq") as mock_groq:
+    ...     mock_groq.return_value.chat.completions.create.return_value = fake_response
+    ...     response = llm([{"role": "user", "content": "Hello!"}])
+    >>> response.content
+    'Ahoy, matey!'
+    """
+
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
     completion = client.chat.completions.create(
