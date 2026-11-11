@@ -189,7 +189,18 @@ class Chat:
 
 
 def run_command(command):
-    """Execute a manual slash command using a registered tool."""
+    """Execute a manual slash command using a registered tool.
+
+    >>> run_command("/calculate 2 + 3")
+    '5'
+    >>> run_command("/unknown")
+    "Error: Unknown command 'unknown'"
+    >>> run_command("/")
+    'Error: Empty command'
+    >>> run_command("/grep")
+    'Error: grep requires a pattern and path'
+    """
+
     parts = command[1:].split()
 
     if not parts:
@@ -221,7 +232,14 @@ def run_command(command):
 
 
 def repl(temperature=0.8, debug=False):
-    """Run an interactive chatbot with optional tool debugging."""
+    """Run an interactive chatbot with optional tool debugging.
+
+    >>> from unittest.mock import patch
+    >>> with patch("builtins.input", side_effect=EOFError):
+    ...     repl()
+    <BLANKLINE>
+    """
+
     chat = Chat(
         system="You are a helpful assistant. You always speak like a pirate.",
         debug=debug,
@@ -251,7 +269,14 @@ def repl(temperature=0.8, debug=False):
 
 
 def main():
-    """Launch interactive chat, debug mode, or a one-shot message."""
+    """Launch interactive chat, debug mode, or a one-shot message.
+    >>> from unittest.mock import patch
+    >>> with patch("sys.argv", ["chat"]):
+    ...     with patch("chat.repl") as mock_repl:
+    ...         main()
+    ...         mock_repl.assert_called_once_with()
+    """
+
     if len(sys.argv) > 1 and sys.argv[1] == "--debug":
         repl(debug=True)
 
