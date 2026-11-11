@@ -3,7 +3,11 @@ from chat import Chat
 
 
 def test_butterfly_image_upload():
-    """Make sure my butterfly image gets added to the chat."""
+    """Check that my butterfly image is added to the chat.
+
+    >>> callable(test_butterfly_image_upload)
+    True
+    """
     import base64
     from pathlib import Path
     from tempfile import TemporaryDirectory
@@ -38,7 +42,11 @@ def test_butterfly_image_upload():
 
 
 def test_image_paths_stay_in_project():
-    """Make sure DocChat can't wander outside the project folder."""
+    """Check that image paths cannot escape the project folder.
+
+    >>> callable(test_image_paths_stay_in_project)
+    True
+    """
     from copy import deepcopy
 
     from tools.load_image import load_image
@@ -61,7 +69,11 @@ def test_image_paths_stay_in_project():
 
 
 def test_compact_history():
-    """Check that DocChat remembers a short summary instead of every message."""
+    """Check that DocChat replaces conversation history with a summary.
+
+    >>> callable(test_compact_history)
+    True
+    """
     from unittest.mock import MagicMock, patch
     from tools.compact import compact
 
@@ -88,7 +100,11 @@ def test_compact_history():
 
 
 def test_compact_five_line_limit():
-    """Make sure DocChat doesn't keep a summary longer than five lines."""
+    """Check that conversation summaries contain at most five lines.
+
+    >>> callable(test_compact_five_line_limit)
+    True
+    """
     from unittest.mock import MagicMock, patch
     from tools.compact import compact
 
@@ -112,7 +128,11 @@ def test_compact_five_line_limit():
 
 
 def test_automatic_tool_call():
-    """Make sure DocChat runs a tool when the model requests one."""
+    """Check that DocChat executes tools requested by the model.
+
+    >>> callable(test_automatic_tool_call)
+    True
+    """
     from unittest.mock import MagicMock, patch
 
     tool_call = MagicMock()
@@ -156,7 +176,11 @@ def test_automatic_tool_call():
 
 
 def test_manual_command_history():
-    """Make sure manual commands work without calling Groq."""
+    """Check that manual commands work without contacting Groq.
+
+    >>> callable(test_manual_command_history)
+    True
+    """
     from unittest.mock import patch
 
     from chat import repl
