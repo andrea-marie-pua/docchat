@@ -1,124 +1,226 @@
 
+"""Run DocChat with manual commands and automatic Groq tool calling."""
+
+import json
 import os
-from copy import deepcopy
-from unittest.mock import MagicMock, patch
+import sys
 
 from dotenv import load_dotenv
 from groq import Groq
 
+from tools.calculate import calculate
+from tools.cat import cat
+from tools.grep import grep
+from tools.ls import ls
+
 load_dotenv()
-client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
+
+FUNCTIONS = {
+    "calculate": calculate,
+    "cat": cat,
+    "grep": grep,
+    "ls": ls,
+}
+
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate",
+            "description": "Evaluate a mathematical expression.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string"}
+                },
+                "required": ["expression"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ls",
+            "description": "List files in a directory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"}
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cat",
+            "description": "Read the contents of a text file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"}
+                },
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "grep",
+            "description": "Search files using a regular expression.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string"},
+                    "path": {"type": "string"}
+                },
+                "required": ["pattern", "path"]
+            }
+        }
+    }
+]
 
 
 def llm(messages, temperature=1):
+    """Send the conversation and available tools to Groq."""
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
     completion = client.chat.completions.create(
         messages=messages,
-        model='openai/gpt-oss-20b',
+        model="openai/gpt-oss-20b",
         temperature=temperature,
+        tools=TOOLS,
+        tool_choice="auto",
+        timeout=30,
     )
-    return completion.choices[0].message.content
+
+    return completion.choices[0].message
 
 
 class Chat:
-    def __init__(self, system='You are a helpful assistant.'):
-        self.messages = [{'role': 'system', 'content': system}]
+    """Manage chatbot conversations and tool execution."""
+
+    def __init__(self, system="You are a helpful assistant.", debug=False):
+        """Initialize conversation history and debug settings."""
+        self.debug = debug
+        self.messages = [{"role": "system", "content": system}]
 
     def send_message(self, message, temperature=0.8):
-        """Send a message and retain the reply.
+        """Send a message, execute requested tools, and retain the reply."""
+        self.messages.append({"role": "user", "content": message})
 
-        >>> response = MagicMock()
-        >>> response.choices[0].message.content = 'Hello!'
-        >>> with patch.object(client.chat.completions, 'create', return_value=response):
-        ...     chat = Chat(system='Be brief.')
-        ...     print(chat.send_message('Hi', temperature=0))
-        Hello!
-        >>> expected = [
-        ...     {'role': 'system', 'content': 'Be brief.'},
-        ...     {'role': 'user', 'content': 'Hi'},
-        ...     {'role': 'assistant', 'content': 'Hello!'},
-        ... ]
-        >>> chat.messages == expected
-        True
+        for _ in range(10):
+            response = llm(self.messages, temperature=temperature)
 
-        >>> first = MagicMock()
-        >>> first.choices[0].message.content = 'Ahoy!'
-        >>> second = MagicMock()
-        >>> second.choices[0].message.content = 'You said hello!'
-        >>> snapshots = []
-        >>> responses = iter([first, second])
-        >>> def fake_create(*args, **kwargs):
-        ...     snapshots.append(deepcopy(kwargs['messages']))
-        ...     return next(responses)
-        >>> with patch.object(client.chat.completions, 'create', side_effect=fake_create):
-        ...     bot = Chat(system='Be a pirate.')
-        ...     print(bot.send_message('Hello', temperature=0))
-        ...     print(bot.send_message('What did I say?', temperature=0))
-        Ahoy!
-        You said hello!
-        >>> snapshots[1] == [
-        ...     {'role': 'system', 'content': 'Be a pirate.'},
-        ...     {'role': 'user', 'content': 'Hello'},
-        ...     {'role': 'assistant', 'content': 'Ahoy!'},
-        ...     {'role': 'user', 'content': 'What did I say?'},
-        ... ]
-        True
-        >>> bot.messages[-1] == {
-        ...     'role': 'assistant',
-        ...     'content': 'You said hello!'
-        ... }
-        True
-        """
-        self.messages.append({'role': 'user', 'content': message})
-        reply = llm(self.messages, temperature=temperature)
-        self.messages.append({'role': 'assistant', 'content': reply})
-        return reply
+            response_dict = response.model_dump(exclude_none=True)
+            self.messages.append(response_dict)
+
+            if not response.tool_calls:
+                return response.content
+
+            for call in response.tool_calls:
+                name = call.function.name
+
+                if self.debug:
+                    print("TOOL REQUEST:", name, call.function.arguments)
+
+                try:
+                    arguments = json.loads(call.function.arguments)
+
+                    if name not in FUNCTIONS:
+                        result = f"Error: Unknown tool '{name}'"
+                    else:
+                        result = FUNCTIONS[name](**arguments)
+
+                except (ValueError, TypeError, KeyError) as error:
+                    result = f"Error: {error}"
+
+                self.messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "content": str(result),
+                })
+
+        return "Error: Too many tool requests"
 
 
-def repl(temperature=0.8):
-    """Run an interactive chatbot conversation.
+def run_command(command):
+    """Execute a manual slash command using a registered tool."""
+    parts = command[1:].split()
 
-    Test two messages, retained history, and EOFError.
+    if not parts:
+        return "Error: Empty command"
 
-    >>> first = MagicMock()
-    >>> first.choices[0].message.content = 'Ahoy!'
-    >>> second = MagicMock()
-    >>> second.choices[0].message.content = 'You said hello!'
-    >>> snapshots = []
-    >>> responses = iter([first, second])
-    >>> def fake_create(*args, **kwargs):
-    ...     snapshots.append(deepcopy(kwargs['messages']))
-    ...     return next(responses)
-    >>> with patch('builtins.input', side_effect=['Hello', 'What did I say?', EOFError]):
-    ...     with patch.object(client.chat.completions, 'create', side_effect=fake_create):
-    ...         repl(temperature=0)
-    Ahoy!
-    You said hello!
-    <BLANKLINE>
-    >>> len(snapshots)
-    2
-    >>> snapshots[1][1:4] == [
-    ...     {'role': 'user', 'content': 'Hello'},
-    ...     {'role': 'assistant', 'content': 'Ahoy!'},
-    ...     {'role': 'user', 'content': 'What did I say?'},
-    ... ]
-    True
+    name = parts[0]
+    arguments = parts[1:]
 
-    Test KeyboardInterrupt separately.
+    if name not in FUNCTIONS:
+        return f"Error: Unknown command '{name}'"
 
-    >>> with patch('builtins.input', side_effect=KeyboardInterrupt):
-    ...     repl(temperature=0)
-    <BLANKLINE>
-    """
+    try:
+        if name == "calculate":
+            return str(FUNCTIONS[name](" ".join(arguments)))
+
+        if name == "grep":
+            if len(arguments) < 2:
+                return "Error: grep requires a pattern and path"
+            return str(FUNCTIONS[name](arguments[0], arguments[1]))
+
+        if name == "ls":
+            return str(FUNCTIONS[name](*arguments))
+
+        if name == "cat":
+            return str(FUNCTIONS[name](*arguments))
+
+    except TypeError as error:
+        return f"Error: {error}"
+
+
+def repl(temperature=0.8, debug=False):
+    """Run an interactive chatbot with optional tool debugging."""
     chat = Chat(
-        system='You are a helpful assistant. You always speak like a pirate.'
+        system="You are a helpful assistant. You always speak like a pirate.",
+        debug=debug,
     )
+
     try:
         while True:
-            user_input = input('chat> ')
-            print(chat.send_message(user_input, temperature=temperature))
+            user_input = input("chat> ")
+
+            if user_input.startswith("/"):
+                result = run_command(user_input)
+                print(result)
+
+                chat.messages.append({
+                    "role": "user",
+                    "content": user_input,
+                })
+                chat.messages.append({
+                    "role": "assistant",
+                    "content": str(result),
+                })
+            else:
+                print(chat.send_message(user_input, temperature=temperature))
+
     except (KeyboardInterrupt, EOFError):
         print()
 
 
-if __name__ == '__main__':
-    repl()
+def main():
+    """Launch interactive chat, debug mode, or a one-shot message."""
+    if len(sys.argv) > 1 and sys.argv[1] == "--debug":
+        repl(debug=True)
+
+    elif len(sys.argv) > 1:
+        message = " ".join(sys.argv[1:])
+        bot = Chat()
+        print(bot.send_message(message))
+
+    else:
+        repl()
+
+
+if __name__ == "__main__":
+    main()
