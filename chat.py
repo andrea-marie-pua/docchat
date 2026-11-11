@@ -115,7 +115,18 @@ def llm(messages, temperature=1):
 
 
 class Chat:
-    """Manage chatbot conversations and tool execution."""
+    """Manage chatbot conversations and tool execution.
+
+    Examples:
+        >>> bot = Chat(system="You are a helpful pirate.")
+        >>> bot.messages
+        [{'role': 'system', 'content': 'You are a helpful pirate.'}]
+        >>> bot.debug
+        False
+        >>> debug_bot = Chat(debug=True)
+        >>> debug_bot.debug
+        True
+    """
 
     def __init__(self, system="You are a helpful assistant.", debug=False):
         """Initialize conversation history and debug settings."""
@@ -123,7 +134,23 @@ class Chat:
         self.messages = [{"role": "system", "content": system}]
 
     def send_message(self, message, temperature=0.8):
-        """Send a message, execute requested tools, and retain the reply."""
+        """Send a message, execute requested tools, and retain the reply.
+        >>> from unittest.mock import MagicMock, patch
+        >>> bot = Chat()
+        >>> response = MagicMock()
+        >>> response.tool_calls = None
+        >>> response.content = "Ahoy!"
+        >>> response.model_dump.return_value = {"role": "assistant", "content": "Ahoy!"}
+        >>> with patch("chat.llm", return_value=response):
+        ...     answer = bot.send_message("Hello!")
+        >>> answer
+        'Ahoy!'
+        >>> bot.messages[-2]["content"]
+        'Hello!'
+        >>> bot.messages[-1]["content"]
+        'Ahoy!'
+        """
+
         self.messages.append({"role": "user", "content": message})
 
         for _ in range(10):
