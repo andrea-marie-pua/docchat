@@ -3,7 +3,22 @@
 
 
 def compact(chat):
-    """Replace conversation history with a summary of at most five lines."""
+    """Replace conversation history with a summary of at most five lines.
+    Example using a mocked model response:
+    >>> from types import SimpleNamespace
+    >>> from unittest.mock import patch
+    >>> bot = SimpleNamespace(messages=[
+    ...     {"role": "user", "content": "I like butterflies."}
+    ... ])
+    >>> response = SimpleNamespace(content="The user likes butterflies.")
+    >>> with patch("chat.llm", return_value=response):
+    ...     summary = compact(bot)
+    >>> summary
+    'The user likes butterflies.'
+    >>> len(bot.messages)
+    1
+    """
+
     from chat import llm
 
     messages = chat.messages + [
